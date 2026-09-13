@@ -26,7 +26,12 @@ import { fileURLToPath } from 'node:url'
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
-/** 需要随远端同步的依赖清单（不含源码）。 */
+/**
+ * 需要随远端同步的路径。除依赖清单外还包含 `scripts/` 与根 `package.json`：
+ * 部署只 FTP 覆盖 dist/，不会更新启动脚本本身，因此本脚本必须能把自己与
+ * `start:backend` 的定义一并同步过去，否则每次改动本脚本都要人工上服务器引导一次。
+ * （首次仍需一次性引导：在部署把 scripts/ 送上服务器之前，本脚本并不存在于服务器。）
+ */
 const MANIFESTS = [
   'package.json',
   'pnpm-lock.yaml',
@@ -34,6 +39,7 @@ const MANIFESTS = [
   'packages/api/package.json',
   'packages/frontend/package.json',
   'proto/package.json',
+  'scripts',
 ]
 
 const STAMP = join(ROOT, 'node_modules', '.deps-stamp')
