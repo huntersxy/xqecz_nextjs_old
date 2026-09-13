@@ -103,13 +103,22 @@ function main() {
   }
 
   // 4. 安装。失败只记录，仍以旧依赖启动，下次重启会重试。
-  //    --network-concurrency 必须显式压低：默认值会在本机开 130+ 条并发连接，
-  //    实测导致吞吐崩到几乎为零（12 分钟只拉到 2MB），降到 8 后 832 个包 58 秒装完。
+  //    两个参数都是踩坑得出，不可省略：
+  //    - --network-concurrency：默认并发会在本机开 130+ 条连接，实测吞吐崩到
+  //      「12 分钟只拉到 2MB」；降到 8 后 832 个包 58 秒装完。
+  //    - --config.confirmModulesPurge=false：线上 node_modules 是旧版 pnpm 写下的布局，
+  //      pnpm 会判定 lockfile 不兼容并要求整体清除重建，而无 TTY 时它直接中止
+  //      （ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY），必须显式放行。
   //    timeout 是兜底：任何原因导致的停滞都不会把启动无限期挂住。
   try {
     execFileSync(
       'pnpm',
-      ['install', '--frozen-lockfile', '--network-concurrency=8'],
+      [
+        'install',
+        '--frozen-lockfile',
+        '--network-concurrency=8',
+        '--config.confirmModulesPurge=false',
+      ],
       { cwd: ROOT, stdio: 'inherit', timeout: INSTALL_TIMEOUT_MS },
     )
   } catch (error) {
