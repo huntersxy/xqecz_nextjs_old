@@ -63,7 +63,7 @@
     "vite": "^8.0.8",
     "vite-plugin-image-optimizer": "^2.0.3",
     "vite-plugin-vue-devtools": "^8.2.1",
-    "vitest": "^4.1.7",
+    "vitest": "^4.1.11",
     "vue-tsc": "^3.3.9"
   },
   "engines": {
