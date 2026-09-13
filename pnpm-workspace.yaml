@@ -7,9 +7,30 @@ allowBuilds:
   protobufjs: true
   sharp: true
   vue-demi: true
+minimumReleaseAgeExclude:
+  - baseline-browser-mapping@2.11.23
 onlyBuiltDependencies:
   - '@parcel/watcher'
   - core-js
   - protobufjs
   - sharp
   - vue-demi
+
+# 传递依赖安全覆盖。
+# 上游把传递依赖精确锁死时（如 @nestjs/platform-express 声明 "multer": "2.2.0"），
+# pnpm update 无法推进，只能在此钉住。每项都保持在自身大版本内，避免跨大版本行为变更。
+# tmp 未覆盖：其修复版 0.2.x 跨大版本，而父级 external-editor 声明的是 ^0.0.33。
+# 注意：pnpm 11 起不再读取 package.json 的 pnpm 字段，设置必须写在本文件。
+overrides:
+  multer@^2.0.0: '^2.3.0'
+  brace-expansion@1: '1.1.18'
+  brace-expansion@2: '2.1.4'
+  brace-expansion@5: '5.0.9'
+  fast-uri@3: '3.1.6'
+  js-yaml@4: '4.3.2'
+  browserslist@4: '4.28.9'
+  nanoid@3: '3.3.18'
+  ini@1: '1.3.6'
+  postcss@8: '8.5.28'
+  qs@6: '6.16.0'
+  baseline-browser-mapping@2: '2.11.23'

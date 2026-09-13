@@ -41,8 +41,8 @@ pnpm --filter ./packages/frontend run test
 | 图片查看 | viewerjs | ^1.11 | 全屏图片查看器 |
 | 校验 | zod | ^4.4 | 运行时校验（schemas.ts） |
 | 测试 | vitest + @vue/test-utils + jsdom | ^4.1 / ^2.4 / ^30 | 单元测试（components/composables/stores/utils `__tests__/`） |
-| 校验 | oxlint | ~1.60 | Rust 高性能 lint（correctness 规则） |
-| 校验 | ESLint | ^10.2 | vue-ts + oxlint 插件 |
+| 校验 | oxlint | ~1.78 | Rust 高性能 lint（correctness 规则） |
+| 校验 | ESLint | ^10.8 | vue-ts + oxlint 插件（插件版本与 oxlint 对齐） |
 | 格式化 | Prettier | 3.9 | 统一代码风格 |
 | 图像 | vite-plugin-image-optimizer | ^2.0 | 构建时压缩 PNG/JPEG/WebP/AVIF/SVG |
 
