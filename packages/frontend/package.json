@@ -20,7 +20,7 @@
   "dependencies": {
     "@arco-design/web-vue": "^2.58.0",
     "dayjs": "^1.11.21",
-    "dompurify": "^3.4.2",
+    "dompurify": "^3.4.13",
     "highlight.js": "^11.11.1",
     "marked": "^18.0.3",
     "ofetch": "^1.5.1",
