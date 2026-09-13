@@ -10,7 +10,7 @@
     "build": "pnpm --filter ./packages/api run build && pnpm --filter ./packages/frontend run build && pnpm run worker:build",
     "start": "pnpm run build && pnpm run start:services",
     "start:services": "concurrently -n api,worker,fe -c blue,green,magenta \"pnpm --filter ./packages/api run start:prod\" \"pnpm run worker:run\" \"pnpm --filter ./packages/frontend run preview\"",
-    "start:backend": "NODE_OPTIONS=--max-old-space-size=512 concurrently -n api,worker -c blue,green \"cd packages/api && node dist/main\" \"packages/worker/xqecz-worker\"",
+    "start:backend": "XQECZ_SYNC_DEPS=1 node scripts/sync-deps.mjs; NODE_OPTIONS=--max-old-space-size=512 concurrently -n api,worker -c blue,green \"cd packages/api && node dist/main\" \"packages/worker/xqecz-worker\"",
     "worker:build": "cd packages/worker && CGO_ENABLED=0 go build -o xqecz-worker ./cmd/server/",
     "worker:run": "node scripts/run-worker.mjs",
     "worker:start": "packages/worker/xqecz-worker",

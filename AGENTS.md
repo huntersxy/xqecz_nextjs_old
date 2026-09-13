@@ -68,7 +68,8 @@ D:\xqecz/
 │   └── package.json
 │
 ├── scripts/
-│   └── run-worker.mjs     # 启动 Go Worker（从 packages/api/.env 注入 UPLOAD_DIR）
+│   ├── run-worker.mjs     # 启动 Go Worker（从 packages/api/.env 注入 UPLOAD_DIR）
+│   └── sync-deps.mjs      # 启动前依赖自愈（由 start:backend 首先调用，见「核心约束」）
 │
 ├── pnpm-workspace.yaml
 ├── package.json            # 根脚本（dev / build / start / worker:build）
@@ -131,6 +132,7 @@ pnpm proto:generate                        # 生成 ts/go stub
 - **Redis 内容缓存** — 公开读路径（`content:{id}` 详情、`content_list:{sha1}` 列表/搜索、`tags`、`comments:{cid}:{page}`、`comment_count:{cid}`）经 `RedisService.getOrSetJSON()` 读穿，TTL 5 分钟仅作兜底；**所有写路径必须显式失效**（`clearContentCache` / `clearContentListCache` / `clearCommentCache` / `clearAllContentCaches`），新增写操作时务必补上失效点，避免缓存不更新
 - **软删除** — 所有删除写 `deleted_at`；Entity 已声明 `@DeleteDateColumn()`，TypeORM 的 `find/findOne/findAndCount` 查询自动附加 `WHERE deleted_at IS NULL`，业务代码无需手动过滤
 - **降级优先** — 外部依赖（Tinify/Worker）缺失即降级，gRPC 永不返 rpc error，只返 `success=false` + `error` 文本
+- **部署只传编译产物，依赖在启动时自愈** — `deploy.yml` 只通过 FTP 覆盖 `packages/api/dist/`、worker 二进制与前端 dist，**不传依赖清单、也不执行安装**，所以服务器上的 `node_modules` 不会随部署更新（2026-09 曾发现它停留在 7 月那次安装，仓库半年的依赖升级从未到达生产）。对齐由 `scripts/sync-deps.mjs` 承担：`start:backend` 首先调用它，把依赖清单同步到 `origin/master`，仅当 `pnpm-lock.yaml` 的 blob 哈希变化时才执行 `pnpm install --frozen-lockfile`，指纹存 `node_modules/.deps-stamp`；任何失败都只记日志、不阻断启动。因此**改依赖后的首次重启会多花一次安装时间**，其余重启秒过
 
 ## 技术栈
 
@@ -152,7 +154,7 @@ pnpm proto:generate                        # 生成 ts/go stub
 5. **推荐算法改动** — 只改 `packages/worker/server/recommend.go:computeRecommend()`（纯函数，输入 `RecommendItem`，输出 `ScoredItem`）；刷新节奏/落库在 api `content.service.ts:refreshRecommend()`（多实例通过 Redis 分布式锁防抖，见 `RedisService.acquireLock()`）
 6. **数据库变更** — 改 `packages/api/src/entities/`，生产用正式 migration；`synchronize` 仅本地/测试开，勿在生产长期开启
 7. **瀑布流布局改动（前端首页）** — 纯布局算法在 `packages/frontend/src/composables/useWaterfallLayout.ts:computeLayout()`（与 DOM 解耦，输出 `Map<id, Position>`，可直接单测，勿写死在组件里）；改布局逻辑优先改纯函数并补 `__tests__/useWaterfallLayout.test.ts`。核心约定：**稳定列**（卡片落列后不再换列，`preserveColumns` 默认 true，仅列数/列宽变化时全量最短列重排）、**full 全量重排**（数据集合变化——分页追加/diff 更新/列表替换——时强制重新平衡列底，避免增量分配被懒加载测量失真带偏导致短列空缺；图片尺寸变化仍走增量顺移）、**列底失衡收敛**（增量后 max-min 列高差超过 `IMBALANCE_THRESHOLD` 时自动补一次带锚定的全量重排）、**单一调度**（图片加载/尺寸/宽度变化合并到一帧 `requestAnimationFrame` 只 layout 一次）、**滚动锚定**（重算前 captureAnchor 固定视口顶部卡片）、卡片高度由 `[data-wf-id]` 批量量取、`restore`/`reset` 管 keep-alive 缓存。**加载策略**：首页进入即自动连续拉取全部页（`loadAllPages`，每页 100 条，1-100 → 101-200 → …），不依赖滚动触发，图片保持懒加载；keep-alive 往返用**增量同步**（`syncLatestOnActivated` 先拉最新一页对比本地头部，无变化仅同步字段，头部变化才全量对账）。**缓存**：`listCache`（localStorage）统一在 `onBeforeRouteLeave` 离开时写一次；`diffLists` 有全量快照守卫（fresh 数量不足 cached 时 removed 恒空，只做新增合并，杜绝列表截断）。列表筛选/搜索用自增 `loadSeq` 丢弃过期响应防竞态
-8. **踩坑记忆** — TypeORM `bigint` 主键返字符串，与 Redis ZSet 数值成员比对需 `String()` 归一化；`tsconfig.json` 需 `esModuleInterop:true`（CJS 默认导入）；libvips 的缓存与线程池在 `content/webp.util.ts` 模块加载时全局收紧（`sharp.cache(false)` + `sharp.concurrency(1)`——默认最多 50MB 解码缓存 + 按核数铺开的线程池，在只偶发转图的服务上是净开销），新增 sharp 用法勿再放大缓存；**V8 堆上限只能在进程启动时用 `--max-old-space-size` 设定**，运行期 `v8.setFlagsFromString` 改不动（实测被忽略），而 CI 只覆盖 `packages/api/dist/`、不含启动参数，故启动参数调整改服务器 root `package.json` 的 `start:backend`（其 `NODE_OPTIONS=` 前缀是 POSIX 语法，该脚本只由宝塔 Node 项目调用，Windows 下直接跑会报错，本地请用 `pnpm dev` / `pnpm start:services`）；**pnpm 11 起不再读取 `package.json` 的 `pnpm` 字段**——`overrides` 等设置必须写在 `pnpm-workspace.yaml`（该文件承载传递依赖的安全覆盖，理由见文件内注释）
+8. **踩坑记忆** — TypeORM `bigint` 主键返字符串，与 Redis ZSet 数值成员比对需 `String()` 归一化；`tsconfig.json` 需 `esModuleInterop:true`（CJS 默认导入）；libvips 的缓存与线程池在 `content/webp.util.ts` 模块加载时全局收紧（`sharp.cache(false)` + `sharp.concurrency(1)`——默认最多 50MB 解码缓存 + 按核数铺开的线程池，在只偶发转图的服务上是净开销），新增 sharp 用法勿再放大缓存；**V8 堆上限只能在进程启动时用 `--max-old-space-size` 设定**，运行期 `v8.setFlagsFromString` 改不动（实测被忽略），而 CI 只覆盖 `packages/api/dist/`、不含启动参数，故启动参数调整改服务器 root `package.json` 的 `start:backend`（其 `NODE_OPTIONS=` 前缀是 POSIX 语法，该脚本只由宝塔 Node 项目调用，Windows 下直接跑会报错，本地请用 `pnpm dev` / `pnpm start:services`）；**pnpm 11 起不再读取 `package.json` 的 `pnpm` 字段**——`overrides` 等设置必须写在 `pnpm-workspace.yaml`（该文件承载传递依赖的安全覆盖，理由见文件内注释）；服务器上**不要用 Corepack 的 `pnpm`**——`/usr/bin/pnpm` 是 corepack shim，默认访问 `registry.npmjs.org`，而该机访问不了它（`curl` 超时），会让命令永久挂起；须使用 `npm i -g pnpm@11` 装出的真实 pnpm（在 `/www/server/nodejs/v26.5.0/bin`），它继承 npm 的 `registry.npmmirror.com`；服务器上 **`pnpm install` 必须显式压低网络并发**（`scripts/sync-deps.mjs` 已固定 `--network-concurrency=8`）——默认并发会在本机开 130+ 条连接，实测吞吐崩到「12 分钟只拉到 2MB」，降到 8 后 832 个包 58 秒装完；排查时不要据此怪镜像，大文件实测 npmmirror 6.4MB/s、华为云 11.9MB/s，都不慢（小文件测速会被 TLS 握手开销误导）
 
 ## 迭代规范（AGENTS.md 自身）
 
